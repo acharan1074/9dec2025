@@ -38,7 +38,7 @@ class GatePassListCreateAPIView(ListCreateAPIView):
                 # Male wardens see ONLY male student requests, Female wardens see ONLY female student requests
                 # Students without gender set will NOT appear
                 return GatePass.objects.filter(
-                    student__user__gender=user.gender
+                    student__user__gender__iexact=user.gender
                 ).exclude(
                     student__user__gender__isnull=True
                 ).exclude(

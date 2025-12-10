@@ -187,3 +187,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 # This allows deleting many records at once without hitting the limit
 # Set to a very high number to handle large bulk deletions
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
+
+# Email settings (default sender)
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@gmail.com")
+
+# Local email backend (prints to console). Override via env EMAIL_BACKEND for real SMTP.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+)

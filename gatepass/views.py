@@ -9,6 +9,8 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncMonth
 from django.contrib.auth.views import LoginView
+from django.core.mail import send_mail
+from django.conf import settings
 import random
 import string
 from datetime import datetime, date, time
@@ -19,6 +21,22 @@ from .forms import (
     StudentRegistrationForm, WardenRegistrationForm, SecurityRegistrationForm,
     GatePassRequestForm, WardenApprovalForm, ParentVerificationForm, SecurityReturnForm, WardenDateFilterForm
 )
+
+
+def _send_registration_email(to_email, username, raw_password, role_label):
+    """Send credentials to the registered user's email. Fails silently if email is not configured."""
+    if not to_email:
+        return
+    subject = "Gatepass Account Details"
+    message = (
+        f"Your {role_label} account has been registered.\n\n"
+        f"Username: {username}\n"
+        f"Password: {raw_password}\n"
+        f"Email: {to_email}\n\n"
+        "Please keep these credentials safe."
+    )
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@gatepass.local")
+    send_mail(subject, message, from_email, [to_email], fail_silently=True)
 
 
 def home(request):
@@ -137,10 +155,11 @@ def register(request):
                         while User.objects.filter(username=username).exists():
                             username = f"{base_username}{suffix}"
                             suffix += 1
+                        raw_password = data['password1']
                         user = User.objects.create_user(
                             username=username,
                             email=(data.get('email') or None),
-                            password=data['password1'],
+                            password=raw_password,
                             role='student',
                             mobile_number=data.get('mobile_number') or None,
                             gender=data.get('gender') or None,
@@ -149,6 +168,7 @@ def register(request):
                         student = form.save(commit=False)
                         student.user = user
                         student.save()
+                        _send_registration_email(user.email, username, raw_password, "student")
                         messages.success(request, f"Registration successful! Your username is {username}. Please wait for admin approval before logging in.")
                         return redirect('login')
                 except IntegrityError as e:
@@ -161,10 +181,11 @@ def register(request):
                 try:
                     with transaction.atomic():
                         data = form.cleaned_data
+                        raw_password = data['password1']
                         user = User.objects.create_user(
                             username=data['username'],
                             email=data['email'],
-                            password=data['password1'],
+                            password=raw_password,
                             role='warden',
                             mobile_number=data.get('mobile_number') or None,
                             gender=data.get('gender') or None,
@@ -177,6 +198,7 @@ def register(request):
                             name=f"{data['first_name']} {data['last_name']}",
                             department=data.get('department', '')
                         )
+                        _send_registration_email(user.email, user.username, raw_password, "warden")
                         messages.success(request, 'Registration successful! Please wait for admin approval.')
                         return redirect('login')
                 except Exception as e:
@@ -194,10 +216,11 @@ def register(request):
             if form.is_valid():
                 with transaction.atomic():
                     data = form.cleaned_data
+                    raw_password = data['password1']
                     user = User.objects.create_user(
                         username=data['username'],
                         email=data['email'],
-                        password=data['password1'],
+                        password=raw_password,
                         role='security',
                         mobile_number=data.get('mobile_number') or None,
                         first_name=data['first_name'],
@@ -209,6 +232,7 @@ def register(request):
                         name=f"{data['first_name']} {data['last_name']}",
                         shift=data.get('shift', '')
                     )
+                    _send_registration_email(user.email, user.username, raw_password, "security")
                     messages.success(request, 'Registration successful! Please wait for admin approval.')
                     return redirect('login')
             context['security_form'] = form
@@ -238,10 +262,11 @@ def register_student(request):
                 student_data = form.cleaned_data
                 username = f"{student_data['student_name'].replace(' ', '')}@{student_data['hall_ticket_no'][-4:]}"
                 
+                raw_password = student_data['password1']
                 user = User.objects.create_user(
                     username=username,
                     email=(student_data.get('email') or None),
-                    password=student_data['password1'],
+                    password=raw_password,
                     role='student',
                     mobile_number=student_data.get('mobile_number') or None,
                     gender=student_data.get('gender') or None,
@@ -252,6 +277,8 @@ def register_student(request):
                 student = form.save(commit=False)
                 student.user = user
                 student.save()
+                
+                _send_registration_email(user.email, username, raw_password, "student")
                 
                 messages.success(request, 'Registration successful! Please wait for admin approval.')
                 return redirect('login')
@@ -268,11 +295,12 @@ def register_warden(request):
         if form.is_valid():
             with transaction.atomic():
                 warden_data = form.cleaned_data
+                raw_password = warden_data['password1']
                 
                 user = User.objects.create_user(
                     username=warden_data['username'],
                     email=warden_data['email'],
-                    password=warden_data['password1'],
+                    password=raw_password,
                     role='warden',
                     mobile_number=warden_data.get('mobile_number') or None,
                     gender=warden_data.get('gender') or None,
@@ -287,6 +315,8 @@ def register_warden(request):
                     name=f"{warden_data['first_name']} {warden_data['last_name']}",
                     department=warden_data.get('department', '')
                 )
+                
+                _send_registration_email(user.email, user.username, raw_password, "warden")
                 
                 messages.success(request, 'Registration successful! Please wait for admin approval.')
                 return redirect('login')
@@ -303,11 +333,12 @@ def register_security(request):
         if form.is_valid():
             with transaction.atomic():
                 security_data = form.cleaned_data
+                raw_password = security_data['password1']
                 
                 user = User.objects.create_user(
                     username=security_data['username'],
                     email=security_data['email'],
-                    password=security_data['password1'],
+                    password=raw_password,
                     role='security',
                     mobile_number=security_data.get('mobile_number') or None,
                     first_name=security_data['first_name'],
@@ -321,6 +352,8 @@ def register_security(request):
                     name=f"{security_data['first_name']} {security_data['last_name']}",
                     shift=security_data.get('shift', '')
                 )
+                
+                _send_registration_email(user.email, user.username, raw_password, "security")
                 
                 messages.success(request, 'Registration successful! Please wait for admin approval.')
                 return redirect('login')
@@ -427,7 +460,7 @@ def create_gatepass(request):
                 wardens_to_notify = User.objects.filter(
                     role='warden', 
                     is_approved=True, 
-                    gender=student_gender  # Only wardens with EXACT matching gender
+                    gender__iexact=student_gender  # Only wardens with EXACT matching gender (case-insensitive)
                 ).exclude(
                     gender__isnull=True
                 ).exclude(
@@ -714,7 +747,7 @@ def warden_dashboard(request):
         # - Any request where student gender doesn't match is EXCLUDED
         # IMPORTANT: We filter by the normalized warden_gender value
         all_requests = all_requests.filter(
-            student__user__gender=warden_gender
+            student__user__gender__iexact=warden_gender
         ).exclude(
             student__user__gender__isnull=True
         ).exclude(
